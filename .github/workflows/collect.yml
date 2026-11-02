@@ -1,0 +1,60 @@
+# Daily bank listing snapshot for parsel_app (ADR 0048 in the app repo).
+#
+# Reads yesterday's snapshot from the `data` branch, runs the collector, and
+# force-pushes a one-commit `data` branch so history does not grow.
+name: collect
+
+on:
+  schedule:
+    # 03:30 Europe/Istanbul (UTC+3, no DST).
+    - cron: '30 0 * * *'
+  workflow_dispatch:
+    inputs:
+      max_details:
+        description: Detail pages to read this run
+        default: '3000'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Previous snapshot
+        run: |
+          mkdir -p prev
+          if git fetch --depth=1 origin data; then
+            git show FETCH_HEAD:snapshot.json > prev/snapshot.json || rm -f prev/snapshot.json
+          fi
+
+      - name: Collect
+        run: >
+          dart run collector/collect.dart
+          --previous prev/snapshot.json
+          --out out
+          --max-details ${{ github.event.inputs.max_details || '3000' }}
+
+      - name: Publish
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          cd out
+          git init -q
+          git checkout -q -b data
+          git config user.name "parsel-collector"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add snapshot.json
+          git commit -q -m "Snapshot $(date -u +%F)"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" data

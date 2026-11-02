@@ -1,0 +1,7 @@
+name: parsel_bank_collector
+description: Daily bank listing collector for parsel_app (ADR 0048).
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ^3.13.0
