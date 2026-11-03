@@ -359,25 +359,35 @@ List<BankListingRecord> mergeSnapshot({
 ///
 /// The first key is the seller group plus the bank's own number. The second
 /// is seller group, place, ada, parsel and unit, used only when the unit is
-/// known: one parcel often carries several flats for sale. The kept row is
-/// the one with parcel data; the other's URL goes to [alsoAt].
+/// known and only across platforms: on one platform two numbers are two
+/// listings, even in a site whose villas share one parcel and unit number.
+/// The kept row is the one with parcel data; the other's URL goes to
+/// [alsoAt].
 List<BankListingRecord> dedupeListings(List<BankListingRecord> rows) {
-  final Map<String, int> index = <String, int>{};
+  final Map<String, int> byRef = <String, int>{};
+  final Map<String, int> byLot = <String, int>{};
   final List<BankListingRecord> out = <BankListingRecord>[];
   for (final BankListingRecord row in rows) {
-    final List<String> keys = <String>[
-      if (row.refNorm.length >= 3) 'ref|${row.sellerGroup}|${row.refNorm}',
-      if (row.hasParcel && row.unit.isNotEmpty)
-        'lot|${row.sellerGroup}|${foldText(row.il)}|${foldText(row.ilce)}|'
-            '${row.ada}|${row.parsel}|${row.unit}',
-    ];
-    int? hit;
-    for (final String key in keys) {
-      hit ??= index[key];
+    final String? refKey = row.refNorm.length >= 3
+        ? '${row.sellerGroup}|${row.refNorm}'
+        : null;
+    final String? lotKey = row.hasParcel && row.unit.isNotEmpty
+        ? '${row.sellerGroup}|${foldText(row.il)}|${foldText(row.ilce)}|'
+              '${row.ada}|${row.parsel}|${row.unit}'
+        : null;
+    int? hit = refKey == null ? null : byRef[refKey];
+    if (hit == null && lotKey != null) {
+      final int? lot = byLot[lotKey];
+      if (lot != null && out[lot].source != row.source) {
+        hit = lot;
+      }
     }
     if (hit == null) {
-      for (final String key in keys) {
-        index[key] = out.length;
+      if (refKey != null) {
+        byRef[refKey] = out.length;
+      }
+      if (lotKey != null) {
+        byLot.putIfAbsent(lotKey, () => out.length);
       }
       out.add(row);
       continue;
@@ -393,8 +403,8 @@ List<BankListingRecord> dedupeListings(List<BankListingRecord> rows) {
         ...loser.alsoAt,
       }.where((String url) => url != winner.url).toList(),
     );
-    for (final String key in keys) {
-      index[key] = hit;
+    if (refKey != null) {
+      byRef[refKey] = hit;
     }
   }
   return out;

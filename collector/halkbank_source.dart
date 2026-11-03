@@ -25,7 +25,6 @@ BankListingRecord? halkbankRowFromJson(Map<String, Object?> row) {
   if (seri is! int) {
     return null;
   }
-  final String ilanNo = text('ilanNo');
   final DateTime? ends = parseLocalDateTime(row['ihaleBitisTarihi']);
   final String il = text('intengoIl').isNotEmpty
       ? text('intengoIl')
@@ -39,7 +38,8 @@ BankListingRecord? halkbankRowFromJson(Map<String, Object?> row) {
     sellerName: halkbankSeller.name,
     sellerType: halkbankSeller.type,
     sellerGroup: halkbankSeller.group,
-    ref: ilanNo.isNotEmpty ? ilanNo : '$seri',
+    // ilanNo repeats (0, 4, 6 ... on 2026-11-03); seriNo is the portal's id.
+    ref: '$seri',
     title: text('baslik'),
     category: titleCaseTr(text('satisNiteligi')),
     subCategory: titleCaseTr(text('emlakTipAd')),
