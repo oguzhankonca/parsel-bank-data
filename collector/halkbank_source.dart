@@ -75,6 +75,28 @@ String _photo(Map<Object?, Object?> row) {
       '&name=${Uri.encodeComponent(name)}';
 }
 
+/// Photo key `<folder>|<medium file>` of a gallery entry. The app builds
+/// `FotoGoster` URLs for the `small/` and `medium/` folders from it.
+String _photoKey(Map<Object?, Object?> item) {
+  final Object? path = item['path'];
+  final Object? name = item['fotoMd'];
+  if (path is! String || name is! String || name.isEmpty) {
+    return '';
+  }
+  return '$path|$name';
+}
+
+/// Photo key of a `FotoGoster` URL, for the list's cover photo.
+String halkbankPhotoKey(String url) {
+  final Uri? uri = Uri.tryParse(url);
+  final String? path = uri?.queryParameters['path'];
+  final String? name = uri?.queryParameters['name'];
+  if (path == null || name == null || !path.endsWith('medium/')) {
+    return '';
+  }
+  return '${path.substring(0, path.length - 'medium/'.length)}|$name';
+}
+
 int _seriFromUrl(String url) => int.parse(url.split('/').last);
 
 /// Every live Halkbank listing, without detail fields.
@@ -175,9 +197,9 @@ BankListingRecord applyHalkbankDetail(
     longitude: pin?.longitude,
     detailVersion: detailVersion,
     photos: <String>{
-      if (row.photo.isNotEmpty) row.photo,
+      halkbankPhotoKey(row.photo),
       for (final Object? item in gallery)
-        if (item is Map) _photo(item),
-    }.where((String url) => url.isNotEmpty).take(maxPhotos).toList(),
+        if (item is Map) _photoKey(item),
+    }.where((String key) => key.isNotEmpty).take(maxPhotos).toList(),
   );
 }

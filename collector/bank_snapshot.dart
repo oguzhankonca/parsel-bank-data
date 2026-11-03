@@ -141,8 +141,10 @@ class BankListingRecord {
   /// ilçe, e.g. an old köy name next to today's mahalle.
   final List<String> mahalleElsewhere;
 
-  /// Gallery image URLs on the source site, medium size, cover first. The
-  /// app loads them from there; the snapshot never holds image bytes.
+  /// Gallery photo keys, cover first: `136/5388/<uuid>.jpg` on İntengo,
+  /// `<folder>|<file>` on Halkbank. The app builds the small, medium and
+  /// large URLs from a key and loads them from the source site; the
+  /// snapshot never holds image bytes or full URLs (ADR 0050).
   final List<String> photos;
 
   /// True when today's run should read the detail page of this row.

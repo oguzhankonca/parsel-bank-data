@@ -169,27 +169,34 @@ BankListingRecord applyIntengoDetail(BankListingRecord row, String html) {
   );
 }
 
-/// Gallery images of a detail page, medium size, [cover] first. The page
-/// links each image as `<uuid>_medium.jpg`, `<uuid>_large.jpg` or
-/// `<uuid>.jpg`; all three name one photo. With a [cover], only images in
-/// its folder count, so another listing's thumbnail on the page is skipped.
+const String intengoPhotoBase =
+    'https://refiles.intengo.com/images/real-estate/';
+
+final RegExp _intengoImage = RegExp(
+  r'https://refiles\.intengo\.com/images/real-estate/([\w/-]+?)'
+  r'(?:_(?:medium|large|small))?\.(jpe?g|png|webp)',
+);
+
+/// Photo key of an İntengo image URL: `136/5388/<uuid>.jpg`. The site
+/// serves `_small`, `_medium` and `_large` of each key (ADR 0050).
+String intengoPhotoKey(String url) {
+  final Match? m = _intengoImage.firstMatch(url);
+  return m == null ? '' : '${m.group(1)}.${m.group(2)}';
+}
+
+/// Gallery photo keys of a detail page, [cover] first. With a cover, only
+/// images in its folder count, so another listing's thumbnail is skipped.
 List<String> intengoPhotos(String html, {String cover = ''}) {
-  final Set<String> out = <String>{if (cover.isNotEmpty) cover};
-  final int slash = cover.lastIndexOf('/');
-  final String folder = slash < 0 ? '' : cover.substring(0, slash + 1);
-  for (final Match m in RegExp(
-    r'https://refiles\.intengo\.com/images/real-estate/[\w/-]+?'
-    r'(?:_(?:medium|large|small))?\.(jpe?g|png|webp)',
-  ).allMatches(html)) {
-    final String url = m.group(0)!;
-    if (folder.isNotEmpty && !url.startsWith(folder)) {
+  final String coverKey = intengoPhotoKey(cover);
+  final Set<String> out = <String>{if (coverKey.isNotEmpty) coverKey};
+  final int slash = coverKey.lastIndexOf('/');
+  final String folder = slash < 0 ? '' : coverKey.substring(0, slash + 1);
+  for (final Match m in _intengoImage.allMatches(html)) {
+    final String key = '${m.group(1)}.${m.group(2)}';
+    if (folder.isNotEmpty && !key.startsWith(folder)) {
       continue;
     }
-    final String base = url.replaceFirst(
-      RegExp(r'(?:_(?:medium|large|small))?\.(jpe?g|png|webp)$'),
-      '',
-    );
-    out.add('${base}_medium.${m.group(1)}');
+    out.add(key);
     if (out.length >= maxPhotos) {
       break;
     }
