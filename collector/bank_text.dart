@@ -127,8 +127,10 @@ String unitFromAddress(String? address) {
   final String text = address ?? '';
   final List<RegExp> patterns = <RegExp>[
     RegExp(r'BB\s*(?:No)?\s*:?\s*([\d,]+)', caseSensitive: false),
-    RegExp(r'Ba[ğg][ıi]ms[ıi]z\s+B[öo]l[üu]m\s*(?:No)?\s*:?\s*([\d,]+)',
-        caseSensitive: false),
+    RegExp(
+      r'Ba[ğg][ıi]ms[ıi]z\s+B[öo]l[üu]m\s*(?:No)?\s*:?\s*([\d,]+)',
+      caseSensitive: false,
+    ),
     RegExp(r'\bD(?:A[İI]RE)?\s*:\s*(\d+)', caseSensitive: false),
   ];
   for (final RegExp pattern in patterns) {
@@ -169,6 +171,23 @@ DateTime? parseLocalDateTime(Object? value) {
   }
   final String text = value.trim().replaceFirst(' ', 'T');
   return DateTime.tryParse(text);
+}
+
+/// A map pin inside Türkiye's bounding box, else null. Sources send `0`
+/// or an empty string when the seller set no pin.
+({double latitude, double longitude})? parsePin(Object? lat, Object? lon) {
+  final double? latitude = parsePrice(lat);
+  final double? longitude = parsePrice(lon);
+  if (latitude == null || longitude == null) {
+    return null;
+  }
+  if (latitude < 35.5 ||
+      latitude > 42.5 ||
+      longitude < 25.5 ||
+      longitude > 45) {
+    return null;
+  }
+  return (latitude: latitude, longitude: longitude);
 }
 
 /// `yyyy-mm-dd` for [time]'s calendar day.

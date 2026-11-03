@@ -14,6 +14,11 @@ const int snapshotSchema = 1;
 /// Removed listings stay this many days so the app can show "kaldırıldı".
 const int removedKeepDays = 14;
 
+/// What a detail read collects. 1: ada, parsel, unit. 2: also the seller's
+/// map pin. Rows read under an older version are read again once.
+const int detailVersion = 2;
+const int _currentDetailVersion = detailVersion;
+
 /// One price on the day it was first seen.
 class PricePoint {
   const PricePoint(this.day, this.price);
@@ -67,6 +72,10 @@ class BankListingRecord {
     this.removedOn,
     this.prices = const <PricePoint>[],
     this.alsoAt = const <String>[],
+    this.latitude,
+    this.longitude,
+    this.detailVersion = 0,
+    this.mahalleElsewhere = const <String>[],
   });
 
   /// `intengo`, `halkbank`.
@@ -115,6 +124,22 @@ class BankListingRecord {
   /// Other platform URLs for the same property.
   final List<String> alsoAt;
 
+  /// The seller's own map pin (WGS84), from the detail page. The app checks
+  /// it against the cadastre parcel the mahalle name leads to.
+  final double? latitude;
+  final double? longitude;
+
+  /// [detailVersion] of the last detail read, 0 before any.
+  final int detailVersion;
+
+  /// Other mahalle names that other rows give this ada/parsel in the same
+  /// ilçe, e.g. an old köy name next to today's mahalle.
+  final List<String> mahalleElsewhere;
+
+  /// True when today's run should read the detail page of this row.
+  bool get needsDetail =>
+      !detailFetched || detailVersion < _currentDetailVersion;
+
   /// Stable id: platform, seller account and platform reference.
   String get key => '$source:$sellerId:$ref';
 
@@ -138,6 +163,10 @@ class BankListingRecord {
     bool clearRemovedOn = false,
     List<PricePoint>? prices,
     List<String>? alsoAt,
+    double? latitude,
+    double? longitude,
+    int? detailVersion,
+    List<String>? mahalleElsewhere,
   }) {
     return BankListingRecord(
       source: source,
@@ -168,6 +197,10 @@ class BankListingRecord {
       removedOn: clearRemovedOn ? null : (removedOn ?? this.removedOn),
       prices: prices ?? this.prices,
       alsoAt: alsoAt ?? this.alsoAt,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      detailVersion: detailVersion ?? this.detailVersion,
+      mahalleElsewhere: mahalleElsewhere ?? this.mahalleElsewhere,
     );
   }
 
@@ -202,6 +235,10 @@ class BankListingRecord {
       'removedOn': removedOn,
       'prices': prices.map((PricePoint p) => p.toJson()).toList(),
       'alsoAt': alsoAt,
+      'lat': latitude,
+      'lon': longitude,
+      'detailVersion': detailVersion,
+      'mahalleElsewhere': mahalleElsewhere,
     };
   }
 
@@ -221,6 +258,9 @@ class BankListingRecord {
     final Object? rawAlso = json['alsoAt'];
     final Object? removed = json['removedOn'];
     final Object? ends = json['endsAt'];
+    final Object? version = json['detailVersion'];
+    final Object? elsewhere = json['mahalleElsewhere'];
+    final bool fetched = json['detailFetched'] == true;
     return BankListingRecord(
       source: source,
       sellerId: sellerId,
@@ -247,7 +287,7 @@ class BankListingRecord {
       lastBid: parsePrice(json['lastBid']),
       endsAt: ends is String ? ends : null,
       photo: text('photo'),
-      detailFetched: json['detailFetched'] == true,
+      detailFetched: fetched,
       firstSeen: text('firstSeen'),
       lastSeen: text('lastSeen'),
       removedOn: removed is String ? removed : null,
@@ -259,6 +299,16 @@ class BankListingRecord {
       alsoAt: rawAlso is List
           ? <String>[
               for (final Object? item in rawAlso)
+                if (item is String) item,
+            ]
+          : const <String>[],
+      latitude: parsePrice(json['lat']),
+      longitude: parsePrice(json['lon']),
+      // Files from before the field: a fetched row was read under version 1.
+      detailVersion: version is int ? version : (fetched ? 1 : 0),
+      mahalleElsewhere: elsewhere is List
+          ? <String>[
+              for (final Object? item in elsewhere)
                 if (item is String) item,
             ]
           : const <String>[],
@@ -321,6 +371,9 @@ List<BankListingRecord> mergeSnapshot({
         areaM2: old.areaM2,
         endsAt: row.endsAt ?? old.endsAt,
         detailFetched: true,
+        latitude: old.latitude,
+        longitude: old.longitude,
+        detailVersion: old.detailVersion,
       );
     }
     final List<PricePoint> prices = <PricePoint>[...?old?.prices];
@@ -351,7 +404,7 @@ List<BankListingRecord> mergeSnapshot({
       out[old.key] = old.copyWith(removedOn: removed);
     }
   }
-  return dedupeListings(out.values.toList());
+  return markMahalleConflicts(dedupeListings(out.values.toList()));
 }
 
 /// Joins rows that are one property on two platforms or two accounts.
@@ -408,6 +461,35 @@ List<BankListingRecord> dedupeListings(List<BankListingRecord> rows) {
   }
   return out;
 }
+
+/// Sets [BankListingRecord.mahalleElsewhere]: the other mahalle names rows
+/// give the same il, ilçe, ada and parsel. A name that is the start of
+/// another ("Yakacık" and "Yakacık Çarşı") is one place spelled two ways.
+List<BankListingRecord> markMahalleConflicts(List<BankListingRecord> rows) {
+  String lot(BankListingRecord row) =>
+      '${foldText(row.il)}|${foldText(row.ilce)}|${row.ada}|${row.parsel}';
+  final Map<String, Map<String, String>> names =
+      <String, Map<String, String>>{};
+  for (final BankListingRecord row in rows) {
+    if (row.removedOn == null && row.hasParcel && row.mahalle.isNotEmpty) {
+      (names[lot(row)] ??= <String, String>{})[foldText(row.mahalle)] =
+          row.mahalle;
+    }
+  }
+  return <BankListingRecord>[
+    for (final BankListingRecord row in rows)
+      row.copyWith(
+        mahalleElsewhere: <String>[
+          for (final MapEntry<String, String> other
+              in (names[lot(row)] ?? const <String, String>{}).entries)
+            if (!_samePlace(other.key, foldText(row.mahalle))) other.value,
+        ],
+      ),
+  ];
+}
+
+bool _samePlace(String a, String b) =>
+    a.isEmpty || b.isEmpty || a.startsWith(b) || b.startsWith(a);
 
 /// The whole file the app downloads.
 ///

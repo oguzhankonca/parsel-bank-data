@@ -152,6 +152,10 @@ BankListingRecord applyHalkbankDetail(
       ? text('intengoMahalle')
       : text('mahalleKoy');
   final DateTime? ends = parseLocalDateTime(detail['ihaleBitisTarihi']);
+  final ({double latitude, double longitude})? pin = parsePin(
+    detail['enlem'],
+    detail['boylam'],
+  );
   return row.copyWith(
     ada: lot?.ada ?? '',
     parsel: lot?.parsel ?? '',
@@ -160,5 +164,8 @@ BankListingRecord applyHalkbankDetail(
     mahalle: cleanMahalle(mahalle),
     endsAt: ends?.toIso8601String(),
     detailFetched: true,
+    latitude: pin?.latitude,
+    longitude: pin?.longitude,
+    detailVersion: detailVersion,
   );
 }

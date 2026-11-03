@@ -67,18 +67,23 @@ Future<void> main(List<String> args) async {
   await run('intengo', 'İntengo', () => fetchIntengoList(http));
   await run('halkbank', 'Halkbank', () => fetchHalkbankList(http));
 
-  // New rows first, then rows whose detail never loaded.
+  // New rows first, then rows whose detail never loaded, then rows read
+  // under an older detailVersion.
+  int rank(BankListingRecord row) {
+    final BankListingRecord? old = before[row.key];
+    if (old == null) {
+      return 0;
+    }
+    return old.detailFetched ? 2 : 1;
+  }
+
   final List<int> order = List<int>.generate(fetched.length, (int i) => i)
-    ..sort((int a, int b) {
-      final bool newA = !before.containsKey(fetched[a].key);
-      final bool newB = !before.containsKey(fetched[b].key);
-      return newA == newB ? 0 : (newA ? -1 : 1);
-    });
+    ..sort((int a, int b) => rank(fetched[a]).compareTo(rank(fetched[b])));
   int details = 0;
   int detailErrors = 0;
   for (final int i in order) {
     final BankListingRecord row = fetched[i];
-    if (before[row.key]?.detailFetched == true) {
+    if (before[row.key]?.needsDetail == false) {
       continue;
     }
     if (details >= maxDetails) {

@@ -31,9 +31,9 @@ Map<String, Object> intengoSearchBody(int page) => <String, Object>{
 
 /// Public detail URL. The portal routes on the trailing notice id only.
 String intengoDetailUrl(String companyName, String slug, int noticeId) {
-  final String safeSlug = foldText(
-    slug,
-  ).replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+  final String safeSlug = foldText(slug)
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
   final String company = Uri.encodeComponent(companyName);
   return '$intengoOrigin/$company/ilan/$safeSlug-$noticeId/';
 }
@@ -141,6 +141,12 @@ BankListingRecord applyIntengoDetail(BankListingRecord row, String html) {
   final String mahalle = placeParts.length >= 3
       ? cleanMahalle(placeParts.sublist(2).join('/'))
       : row.mahalle;
+  // The location tab embeds `maps?q=<lat>,<lng>`.
+  final Match? map = RegExp(r'maps\?q=(-?\d+\.\d+),(-?\d+\.\d+)')
+      .firstMatch(html);
+  final ({double latitude, double longitude})? pin = map == null
+      ? null
+      : parsePin(map.group(1), map.group(2));
   final String unit =
       fields['Bağımsız Bölüm No'] ??
       fields['Bağımsız Bölüm'] ??
@@ -156,5 +162,8 @@ BankListingRecord applyIntengoDetail(BankListingRecord row, String html) {
         parsePrice(fields['m²']) ??
         row.areaM2,
     detailFetched: true,
+    latitude: pin?.latitude,
+    longitude: pin?.longitude,
+    detailVersion: detailVersion,
   );
 }
