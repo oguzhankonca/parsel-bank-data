@@ -253,8 +253,7 @@ class BankListingRecord {
       removedOn: removed is String ? removed : null,
       prices: rawPrices is List
           ? <PricePoint>[
-              for (final Object? item in rawPrices)
-                ?PricePoint.fromJson(item),
+              for (final Object? item in rawPrices) ?PricePoint.fromJson(item),
             ]
           : const <PricePoint>[],
       alsoAt: rawAlso is List
@@ -411,9 +410,13 @@ List<BankListingRecord> dedupeListings(List<BankListingRecord> rows) {
 }
 
 /// The whole file the app downloads.
+///
+/// [since] is the collector's first day. Neither source publishes a listing
+/// date, so a row first seen on that day has no known listing day.
 Map<String, Object?> snapshotJson({
   required DateTime generatedAt,
   required String day,
+  required String since,
   required List<SourceStatus> sources,
   required List<BankListingRecord> listings,
 }) {
@@ -421,9 +424,28 @@ Map<String, Object?> snapshotJson({
     'schema': snapshotSchema,
     'generatedAt': generatedAt.toUtc().toIso8601String(),
     'day': day,
+    'since': since,
     'sources': sources.map((SourceStatus s) => s.toJson()).toList(),
     'listings': listings.map((BankListingRecord r) => r.toJson()).toList(),
   };
+}
+
+/// First collector day of a decoded snapshot: its `since`, else (files made
+/// before the field) its earliest `firstSeen`, else [today].
+String snapshotSince(Object? decoded, String today) {
+  if (decoded is Map) {
+    final Object? since = decoded['since'];
+    if (since is String && since.isNotEmpty) {
+      return since;
+    }
+  }
+  String earliest = today;
+  for (final BankListingRecord row in recordsFromSnapshot(decoded)) {
+    if (row.firstSeen.isNotEmpty && row.firstSeen.compareTo(earliest) < 0) {
+      earliest = row.firstSeen;
+    }
+  }
+  return earliest;
 }
 
 /// Records from a decoded snapshot. Empty for another schema or bad input.

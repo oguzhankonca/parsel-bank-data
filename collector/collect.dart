@@ -31,7 +31,9 @@ Future<void> main(List<String> args) async {
   final DateTime now = DateTime.now().toUtc();
   final String today = dayKey(now.add(const Duration(hours: 3)));
 
-  final List<BankListingRecord> previous = _readPrevious(options['previous']);
+  final Object? previousJson = _readPrevious(options['previous']);
+  final List<BankListingRecord> previous = recordsFromSnapshot(previousJson);
+  final String since = snapshotSince(previousJson, today);
   final Map<String, BankListingRecord> before = <String, BankListingRecord>{
     for (final BankListingRecord row in previous) row.key: row,
   };
@@ -49,7 +51,9 @@ Future<void> main(List<String> args) async {
     try {
       final List<BankListingRecord> rows = await list();
       fetched.addAll(rows);
-      sources.add(SourceStatus(id: id, name: name, ok: true, count: rows.length));
+      sources.add(
+        SourceStatus(id: id, name: name, ok: true, count: rows.length),
+      );
       stdout.writeln('$id: ${rows.length} rows');
     } on Object catch (error) {
       failed.add(id);
@@ -107,14 +111,17 @@ Future<void> main(List<String> args) async {
       snapshotJson(
         generatedAt: now,
         day: today,
+        since: since,
         sources: sources,
         listings: merged,
       ),
     ),
   );
-  final int active = merged.where((BankListingRecord r) => r.removedOn == null)
+  final int active = merged
+      .where((BankListingRecord r) => r.removedOn == null)
       .length;
-  final int withParcel = merged.where((BankListingRecord r) => r.hasParcel)
+  final int withParcel = merged
+      .where((BankListingRecord r) => r.hasParcel)
       .length;
   stdout.writeln(
     'wrote ${file.path}: ${merged.length} rows, $active active, '
@@ -127,20 +134,21 @@ Future<void> main(List<String> args) async {
   }
 }
 
-List<BankListingRecord> _readPrevious(String? path) {
+/// The decoded previous snapshot, or null.
+Object? _readPrevious(String? path) {
   if (path == null) {
-    return const <BankListingRecord>[];
+    return null;
   }
   final File file = File(path);
   if (!file.existsSync()) {
     stdout.writeln('no previous snapshot at $path');
-    return const <BankListingRecord>[];
+    return null;
   }
   try {
-    return recordsFromSnapshot(jsonDecode(file.readAsStringSync()));
+    return jsonDecode(file.readAsStringSync());
   } on FormatException catch (error) {
     stderr.writeln('previous snapshot unreadable: $error');
-    return const <BankListingRecord>[];
+    return null;
   }
 }
 
