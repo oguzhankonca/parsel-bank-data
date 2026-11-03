@@ -15,9 +15,13 @@ const int snapshotSchema = 1;
 const int removedKeepDays = 14;
 
 /// What a detail read collects. 1: ada, parsel, unit. 2: also the seller's
-/// map pin. Rows read under an older version are read again once.
+/// map pin and the photo gallery. Rows read under an older version are read
+/// again once.
 const int detailVersion = 2;
 const int _currentDetailVersion = detailVersion;
+
+/// Gallery URLs kept per listing; the sites show about 4 to 12.
+const int maxPhotos = 12;
 
 /// One price on the day it was first seen.
 class PricePoint {
@@ -76,6 +80,7 @@ class BankListingRecord {
     this.longitude,
     this.detailVersion = 0,
     this.mahalleElsewhere = const <String>[],
+    this.photos = const <String>[],
   });
 
   /// `intengo`, `halkbank`.
@@ -136,6 +141,10 @@ class BankListingRecord {
   /// ilçe, e.g. an old köy name next to today's mahalle.
   final List<String> mahalleElsewhere;
 
+  /// Gallery image URLs on the source site, medium size, cover first. The
+  /// app loads them from there; the snapshot never holds image bytes.
+  final List<String> photos;
+
   /// True when today's run should read the detail page of this row.
   bool get needsDetail =>
       !detailFetched || detailVersion < _currentDetailVersion;
@@ -167,6 +176,7 @@ class BankListingRecord {
     double? longitude,
     int? detailVersion,
     List<String>? mahalleElsewhere,
+    List<String>? photos,
   }) {
     return BankListingRecord(
       source: source,
@@ -201,6 +211,7 @@ class BankListingRecord {
       longitude: longitude ?? this.longitude,
       detailVersion: detailVersion ?? this.detailVersion,
       mahalleElsewhere: mahalleElsewhere ?? this.mahalleElsewhere,
+      photos: photos ?? this.photos,
     );
   }
 
@@ -239,6 +250,7 @@ class BankListingRecord {
       'lon': longitude,
       'detailVersion': detailVersion,
       'mahalleElsewhere': mahalleElsewhere,
+      'photos': photos,
     };
   }
 
@@ -260,6 +272,7 @@ class BankListingRecord {
     final Object? ends = json['endsAt'];
     final Object? version = json['detailVersion'];
     final Object? elsewhere = json['mahalleElsewhere'];
+    final Object? gallery = json['photos'];
     final bool fetched = json['detailFetched'] == true;
     return BankListingRecord(
       source: source,
@@ -310,6 +323,12 @@ class BankListingRecord {
           ? <String>[
               for (final Object? item in elsewhere)
                 if (item is String) item,
+            ]
+          : const <String>[],
+      photos: gallery is List
+          ? <String>[
+              for (final Object? item in gallery)
+                if (item is String && item.isNotEmpty) item,
             ]
           : const <String>[],
     );
@@ -374,6 +393,7 @@ List<BankListingRecord> mergeSnapshot({
         latitude: old.latitude,
         longitude: old.longitude,
         detailVersion: old.detailVersion,
+        photos: old.photos,
       );
     }
     final List<PricePoint> prices = <PricePoint>[...?old?.prices];

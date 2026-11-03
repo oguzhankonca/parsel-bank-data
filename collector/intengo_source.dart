@@ -165,5 +165,34 @@ BankListingRecord applyIntengoDetail(BankListingRecord row, String html) {
     latitude: pin?.latitude,
     longitude: pin?.longitude,
     detailVersion: detailVersion,
+    photos: intengoPhotos(html, cover: row.photo),
   );
+}
+
+/// Gallery images of a detail page, medium size, [cover] first. The page
+/// links each image as `<uuid>_medium.jpg`, `<uuid>_large.jpg` or
+/// `<uuid>.jpg`; all three name one photo. With a [cover], only images in
+/// its folder count, so another listing's thumbnail on the page is skipped.
+List<String> intengoPhotos(String html, {String cover = ''}) {
+  final Set<String> out = <String>{if (cover.isNotEmpty) cover};
+  final int slash = cover.lastIndexOf('/');
+  final String folder = slash < 0 ? '' : cover.substring(0, slash + 1);
+  for (final Match m in RegExp(
+    r'https://refiles\.intengo\.com/images/real-estate/[\w/-]+?'
+    r'(?:_(?:medium|large|small))?\.(jpe?g|png|webp)',
+  ).allMatches(html)) {
+    final String url = m.group(0)!;
+    if (folder.isNotEmpty && !url.startsWith(folder)) {
+      continue;
+    }
+    final String base = url.replaceFirst(
+      RegExp(r'(?:_(?:medium|large|small))?\.(jpe?g|png|webp)$'),
+      '',
+    );
+    out.add('${base}_medium.${m.group(1)}');
+    if (out.length >= maxPhotos) {
+      break;
+    }
+  }
+  return out.toList();
 }

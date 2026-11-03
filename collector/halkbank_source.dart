@@ -64,7 +64,7 @@ double? _higherBid(Map<String, Object?> row) {
   return now;
 }
 
-String _photo(Map<String, Object?> row) {
+String _photo(Map<Object?, Object?> row) {
   final Object? path = row['path'];
   final Object? name = row['fotoMd'];
   if (path is! String || name is! String || name.isEmpty) {
@@ -127,18 +127,25 @@ Future<BankListingRecord> fetchHalkbankDetail(
     '$halkbankOrigin/IlanWeb/Ilan/Detay',
     <String, Object>{'seriNo': _seriFromUrl(row.url)},
   );
-  final Object? detail = _data(decoded)['detay'];
+  final Map<Object?, Object?> data = _data(decoded);
+  final Object? detail = data['detay'];
   if (detail is! Map) {
     return row.copyWith(detailFetched: true);
   }
-  return applyHalkbankDetail(row, detail);
+  final Object? gallery = data['galeri'];
+  return applyHalkbankDetail(
+    row,
+    detail,
+    gallery: gallery is List ? gallery : const <Object?>[],
+  );
 }
 
 /// Pure part of [fetchHalkbankDetail], for tests.
 BankListingRecord applyHalkbankDetail(
   BankListingRecord row,
-  Map<Object?, Object?> detail,
-) {
+  Map<Object?, Object?> detail, {
+  List<Object?> gallery = const <Object?>[],
+}) {
   String text(String name) {
     final Object? value = detail[name];
     return value == null ? '' : '$value'.trim();
@@ -167,5 +174,10 @@ BankListingRecord applyHalkbankDetail(
     latitude: pin?.latitude,
     longitude: pin?.longitude,
     detailVersion: detailVersion,
+    photos: <String>{
+      if (row.photo.isNotEmpty) row.photo,
+      for (final Object? item in gallery)
+        if (item is Map) _photo(item),
+    }.where((String url) => url.isNotEmpty).take(maxPhotos).toList(),
   );
 }
